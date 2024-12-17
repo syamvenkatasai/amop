@@ -1,0 +1,86 @@
+pipeline:
+  agent: any
+
+  environment:
+    AWS_DEFAULT_REGION: 'us-east-1'
+    AWS_ACCOUNT_ID: '008971638399'
+    LAMBDA_ROLE: 'arn:aws:iam::008971638399:role/AmopSecondLambdaExecutionRoleNewUnique'
+    S3_BUCKET: 'amopservices'
+    deploy: 'dev'
+    LAMBDA_FUNCTION_NAME: 'module_management'
+
+  stages:
+    - stage: Checkout
+      steps:
+        - git:
+            url: 'https://gitlab.amop.services/algonox/Amop2.0.git'
+            credentialsId: '432c80e0-4cd0-4dc6-9f90-69927db544d6'
+            branch: 'main'
+
+    - stage: Build and Deploy Lambda Layer
+      steps:
+        - script: |
+            echo "Creating Lambda layer ZIP for CommonUtils"
+            mkdir -p package/python/lib/python3.9/site-packages
+            pip install -r requirements.txt --target package/python/lib/python3.9/site-packages/
+            
+            if [ ! -d "common_utils" ]; then
+                echo "Error: common_utils directory does not exist."
+                exit 1
+            fi
+            
+            cp -r common_utils package/python/lib/python3.9/site-packages/
+            cd package
+            zip -r ../library.zip python lib
+            cd ..
+            
+            ls -l library.zip
+        - withAWS:
+            region: ${AWS_DEFAULT_REGION}
+            credentials: '79972fba-7295-4747-8b52-7a611516a9f5'
+            script: |
+              echo "Uploading Lambda layer ZIP to S3"
+              aws s3 cp library.zip s3://${S3_BUCKET}/library.zip
+              layerArn=$(aws lambda publish-layer-version \
+                  --layer-name library \
+                  --description "Common utilities layer" \
+                  --compatible-runtimes python3.9 \
+                  --license-info "MIT" \
+                  --content S3Bucket=${S3_BUCKET},S3Key=lambda/library.zip \
+                  --query 'LayerVersionArn' \
+                  --output text)
+              echo "Created new Lambda layer ARN: ${layerArn}"
+              echo "layerArn=${layerArn}" > layerArn.properties
+
+    - stage: Build and Deploy Lambda Function
+      steps:
+        - script: |
+            echo "Creating Lambda function ZIP for module"
+            cd module_management
+            zip -r ../module_management.zip .
+            cd ..
+        - withAWS:
+            region: ${AWS_DEFAULT_REGION}
+            credentials: '79972fba-7295-4747-8b52-7a611516a9f5'
+            script: |
+              functionName='module_management'
+              functionZipFilePath='module_management.zip'
+              lambdaExists=$(aws lambda get-function --function-name ${functionName} --output text 2>&1 || echo "not found")
+              
+              if [[ "${lambdaExists}" == *"not found"* ]]; then
+                  echo "Creating new Lambda function"
+                  aws s3 cp ${functionZipFilePath} s3://${S3_BUCKET}/lambda/${functionName}.zip
+                  aws lambda create-function \
+                      --function-name ${functionName} \
+                      --runtime python3.9 \
+                      --role ${LAMBDA_ROLE} \
+                      --handler main.lambda_handler \
+                      --code S3Bucket=${S3_BUCKET},S3Key=lambda/${functionName}.zip \
+                      --layers $(cat layerArn.properties) \
+                      --timeout 900
+              else
+                  echo "Updating existing Lambda function"
+                  aws s3 cp ${functionZipFilePath} s3://${S3_BUCKET}/lambda/${functionName}.zip
+                  aws lambda update-function-code --function-name ${functionName} --s3-bucket ${S3_BUCKET} --s3-key lambda/${functionName}.zip
+                  aws lambda update-function-configuration --function-name ${functionName} --handler main.lambda_handler --runtime python3.9 --role ${LAMBDA_ROLE} --layers $(cat layerArn.properties) --timeout 900
+              fi

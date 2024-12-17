@@ -1,0 +1,298 @@
+pipeline {
+    agent any
+
+    environment {
+        AWS_DEFAULT_REGION = 'us-east-1'  
+        AWS_ACCOUNT_ID = '008971638399' 
+        LAMBDA_ROLE = 'arn:aws:iam::008971638399:role/AmopSecondLambdaExecutionRoleNewUnique'
+        S3_BUCKET = 'amopservices'
+        deploy = 'dev'
+        LAMBDA_FUNCTION_NAME = 'user_authentication'
+
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                git credentialsId: '432c80e0-4cd0-4dc6-9f90-69927db544d6', url:'https://gitlab.amop.services/algonox/Amop2.0.git' , branch: 'main'
+            }
+        }
+
+        stage('Build and Deploy Lambda Layer') {
+            steps {
+                script {
+                    // Zip common_utils folder for Lambda layer
+                    echo "Creating Lambda layer ZIP for CommonUtils"
+                    sh """
+                    mkdir -p package/python/lib/python3.9/site-packages
+                    pip install -r requirements.txt --target package/python/lib/python3.9/site-packages/
+
+                    # Debug: Check if common_utils exists
+                    if [ ! -d "common_utils" ]; then
+                        echo "Error: common_utils directory does not exist."
+                        exit 1
+                    fi
+                    
+                    # Copy psycopg2 if it's available in the current environment
+                    if [ -d "/usr/lib/psycopg2" ]; then
+                        cp -r /usr/lib/psycopg2/* package/python/lib/python3.9/site-packages/
+                    else
+                        echo "Warning: psycopg2 dolder not found Ensure it is installed in the environment or copied manually."
+                    fi
+
+                    cp -r common_utils package/python/lib/python3.9/site-packages/
+                    cd package
+
+
+                    zip -r ../library.zip python 
+                    cd ..                    
+                    # Debug: List files to confirm library.zip creation
+                    ls -l library.zip
+                    """
+
+                    // Upload Lambda layer ZIP to S3
+                    withAWS(region: AWS_DEFAULT_REGION, credentials: '79972fba-7295-4747-8b52-7a611516a9f5') {
+                        echo "Uploading Lambda layer ZIP to S3"
+                        sh """
+                        aws s3 cp library.zip s3://${S3_BUCKET}/library.zip
+                        """
+                    }
+                    
+                    // Deploy Lambda layer and capture layerArn
+                    def layerArn = deployLambdaLayer()
+                    
+                    // Pass layerArn to next stage (Lambda function deployment)
+                    env.layerArn = layerArn
+                }
+            }
+        }
+
+        stage('Build and Deploy Lambda Function') {
+            steps {
+                script {
+                    // Zip user_authentication folder for Lambda function
+                    echo "Creating Lambda function ZIP for user_authentication"
+                    sh """
+                    cd user_authentication
+                    zip -r ../user_authentication.zip .
+                    cd ..
+                    """
+                    
+                    // Deploy Lambda function with captured layerArn
+                    deployLambdaFunction(env.layerArn)
+                }
+            }
+        }
+
+        //stage('Create API Gateway') {
+        //     steps {
+        //         script {
+        //             withAWS(region: AWS_DEFAULT_REGION, credentials: '1a1b3eaa-4ffb-4faf-836d-ec816d459b81') {
+        //                 def apiId = sh(script: """
+        //                 aws apigateway create-rest-api --name 'user_auth' --region $AWS_DEFAULT_REGION --query 'id' --output text
+        //                 """, returnStdout: true).trim()
+                        
+        //                 def rootResourceId = sh(script: """
+        //                 aws apigateway get-resources --rest-api-id $apiId --region $AWS_DEFAULT_REGION --query 'items[0].id' --output text
+        //                 """, returnStdout: true).trim()
+                        
+        //                 def createResource = { String pathPart ->
+        //                     // Replace invalid characters in path part
+        //                     def sanitizedPathPart = pathPart.replaceAll('[^a-zA-Z0-9._-]', '')
+        //                     sh(script: """
+        //                     aws apigateway create-resource \
+        //                         --rest-api-id $apiId \
+        //                         --parent-id $rootResourceId \
+        //                         --path-part '$sanitizedPathPart' \
+        //                         --query 'id' --output text
+        //                     """, returnStdout: true).trim()
+        //                 }
+                        
+        //                 def createMethod = { String resourceId, String httpMethod, String path ->
+        //                     sh """
+        //                     aws apigateway put-method \
+        //                         --rest-api-id $apiId \
+        //                         --resource-id $resourceId \
+        //                         --http-method $httpMethod \
+        //                         --authorization-type NONE \
+        //                         --request-parameters method.request.querystring.param1=true \
+        //                         --request-parameters method.request.querystring.param2=true
+        //                     """
+                            
+        //                     sh """
+        //                     aws apigateway put-integration \
+        //                         --rest-api-id $apiId \
+        //                         --resource-id $resourceId \
+        //                         --http-method $httpMethod \
+        //                         --type AWS_PROXY \
+        //                         --integration-http-method POST \
+        //                         --uri "arn:aws:apigateway:${AWS_DEFAULT_REGION}:lambda:path/2015-03-31/functions/arn:aws:lambda:${AWS_DEFAULT_REGION}:${AWS_ACCOUNT_ID}:function:${LAMBDA_FUNCTION_NAME}/invocations"
+        //                     """
+                           
+        //                     // Add method response for CORS
+        //                     sh """
+        //                     aws apigateway put-method-response \
+        //                         --rest-api-id $apiId \
+        //                         --resource-id $resourceId \
+        //                         --http-method $httpMethod \
+        //                         --status-code 200 \
+        //                         --response-parameters '{\"method.response.header.Access-Control-Allow-Headers\":true,\"method.response.header.Access-Control-Allow-Methods\":true,\"method.response.header.Access-Control-Allow-Origin\":true}'
+        //                     """
+        //                 }
+                        
+        //                 def createDeployment = {
+        //                     sh """
+        //                     aws apigateway create-deployment \
+        //                         --rest-api-id $apiId \
+        //                         --stage-name dev
+        //                     """
+        //                 }
+                        
+        //                 // Create resources and methods for both endpoints
+        //                 def resource1Id = createResource('login')
+        //                 createMethod(resource1Id, 'POST', '/login')
+                        
+        //                 def resource2Id = createResource('login_using_database')
+        //                 createMethod(resource2Id, 'POST', '/login_using_database')
+                        
+        //                 createDeployment()
+                        
+        //                 env.API_GATEWAY_ID = apiId
+        //             }
+        //         }
+            // }
+        // }
+    }
+}
+
+
+
+// Function to deploy Lambda layer and return layerArn
+def deployLambdaLayer() {
+    echo "Deploying Lambda layer"
+    withAWS(region: AWS_DEFAULT_REGION, credentials: '79972fba-7295-4747-8b52-7a611516a9f5') {
+        def layerName = 'library'
+        def layerZipFilePath = 'library.zip'
+        
+        flag=1
+        if (flag!=1) {
+            echo "Updating existing Lambda layer"
+            // Upload Lambda layer code
+            sh """
+            aws s3 cp ${layerZipFilePath} s3://${S3_BUCKET}/lambda/${layerName}.zip
+            """
+
+            // Publish a new version of the Lambda layer
+            def newLayerArn = sh(
+                script: """
+                aws lambda publish-layer-version \
+                    --layer-name ${layerName} \
+                    --description "Common utilities layer" \
+                    --compatible-runtimes python3.9 \
+                    --license-info "MIT" \
+                    --content S3Bucket=${S3_BUCKET},S3Key=lambda/${layerName}.zip \
+                    --query 'LayerVersionArn' \
+                    --output text
+                """,
+                returnStdout: true
+            ).trim()
+            
+            echo "Created new Lambda layer ARN: ${newLayerArn}"
+            return newLayerArn 
+        } else {
+            echo "Creating new Lambda layer"
+            // Upload Lambda layer code
+            sh """
+            aws s3 cp ${layerZipFilePath} s3://${S3_BUCKET}/lambda/${layerName}.zip
+            """
+
+            // Create Lambda layer
+            def newLayerArn = sh(
+                script: """
+                aws lambda publish-layer-version \
+                    --layer-name ${layerName} \
+                    --description "Common utilities layer" \
+                    --compatible-runtimes python3.9 \
+                    --license-info "MIT" \
+                    --content S3Bucket=${S3_BUCKET},S3Key=lambda/${layerName}.zip \
+                    --query 'LayerVersionArn' \
+                    --output text
+                """,
+                returnStdout: true
+            ).trim()
+            
+            echo "Created new Lambda layer ARN: ${newLayerArn}"
+            return newLayerArn 
+        }
+    }
+}
+// Function to deploy Lambda function using layerArn
+// Function to deploy Lambda function using layerArn
+
+def deployLambdaFunction(layerArn) {
+    echo "Deploying Lambda function"
+    layerArn= 
+    withAWS(region: AWS_DEFAULT_REGION, credentials: '79972fba-7295-4747-8b52-7a611516a9f5') {
+        def functionName = 'user_authentication'
+        def functionZipFilePath = 'user_authentication.zip'
+        
+        // Function to update or create Lambda function
+        def updateOrCreateLambda = {
+            // Check if Lambda function exists
+            def lambdaExists = sh(
+                script: "aws lambda get-function --function-name ${functionName}",
+                returnStatus: true
+            ) == 0
+
+            if (lambdaExists) {
+                echo "Updating existing Lambda function"
+                s3Upload(
+                    bucket: S3_BUCKET, 
+                    file: functionZipFilePath,
+                    path: "lambda/${functionName}.zip"
+                )
+                // Update Lambda function code and configuration
+                sh """
+                aws lambda update-function-code --function-name ${functionName} --s3-bucket ${S3_BUCKET} --s3-key lambda/${functionName}.zip
+                aws lambda update-function-configuration --function-name ${functionName} --handler main.lambda_handler --runtime python3.9 --role ${LAMBDA_ROLE} --layers ${layerArn}
+                """
+            } else {
+                echo "Creating new Lambda function"
+
+                // Upload Lambda function code
+                s3Upload(
+                    bucket: S3_BUCKET, 
+                    file: functionZipFilePath,
+                    path: "lambda/${functionName}.zip"
+                )
+
+                // Create Lambda function
+                sh """
+                aws lambda create-function \
+                    --function-name ${functionName} \
+                    --runtime python3.9 \
+                    --role ${LAMBDA_ROLE} \
+                    --handler main.lambda_handler \
+                    --code S3Bucket=${S3_BUCKET},S3Key=lambda/${functionName}.zip \
+                    --layers ${layerArn}
+                """
+                
+            }
+        }
+
+        // Retry logic for Lambda update operation
+        retry(3) {
+            try {
+                updateOrCreateLambda()
+            } catch (Exception e) {
+                echo "Caught exception: $e"
+                error "Failed to deploy Lambda function: $e"
+            }
+        }
+    }
+}
+
+// Function to upload files to S3 bucket
+def s3Upload(params) {
+    sh "aws s3 cp ${params.file} s3://${params.bucket}/${params.path}"
+}

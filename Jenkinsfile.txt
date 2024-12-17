@@ -1,0 +1,470 @@
+pipeline {
+    agent any
+
+    environment {
+        AWS_DEFAULT_REGION = ''
+        AWS_ACCOUNT_ID = ''
+        LAMBDA_ROLE = ''
+        S3_BUCKET = ''
+        deploy = ''
+        GIT_REPO_URL = ''
+        GIT_BRANCH = ''
+        GIT_CREDENTIALS_ID = ''
+        AWS_CREDENTIALS_ID = ''
+        HOST = ''
+        PORT = ''
+        USER = ''
+        PASSWORD = ''
+        DATABASE = ''
+        COMMON_UTILS_DATABASE = ''
+        REQUEST_ID_URL = ''
+        CLIENT_ID = ''
+        REDIRECT_URL = ''
+        CREATE_USER_URL = ''
+        AUTH_TOKEN = ''
+        AUTHENTICATE_USER_URL = ''
+        SEND_AUTH_REQUEST_URL = ''
+        ACCESS_TOKEN_URL = ''
+        CLIENT_SECRET = ''
+        PASSWORD_RESET_URL = ''
+        PEOPLE_REVIO_CUSTOMER = ''
+        SERVICEPRODUCT = ''
+        REVIOAPI = ''
+        DEVICEBULKCHANGE_TEST = ''
+        OPTIMIZATIONAPI = ''
+        OPTIMIZATIONAPIQUEUERATEPLANCHANGES = ''
+        OPTIMIZATIONAPI_CREATECOMFIRM_SESSION = ''
+        dbname = ''
+        Opensearch_URL = ''
+        Opensearch_USERNAME = ''
+        Opensearch_PASSWORD = ''
+        ALERT = ''
+        KILL_BILL_MAIL_TRIGGER = ''
+        zitadel_domain = ''
+        ENV = ''
+        S3_BUCKET_NAME = ''
+        APIUSERNAME = ''
+        APIPASSWORD = ''
+        ONEPOINTOSERVER = ''
+        ONEPOINTODATABASE = ''
+        ONEPOINTOUSERNAME = ''
+        ONEPOINTOPASSWORD = ''
+        EXPORT_BASE_PATH = ''
+    }
+
+    stages {
+        stage('Load Jenkins Environment Variables') {
+        steps {
+            script {
+                // Define the list of parameters
+                def JENKINS_PARAMS = [
+                    "AWS_DEFAULT_REGION",
+                    "AWS_ACCOUNT_ID",
+                    "LAMBDA_ROLE",
+                    "S3_BUCKET",
+                    "deploy",
+                    "GIT_REPO_URL",
+                    "GIT_BRANCH",
+                    "GIT_CREDENTIALS_ID",
+                    "AWS_CREDENTIALS_ID"
+                    
+                ]
+
+                // Define the base path for your SSM parameters
+                def JENKINS_PATH = '/AMOP/Sandbox/'
+
+                // Use Jenkins AWS credentials to access AWS Parameter Store
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: '79972fba-7295-4747-8b52-7a611516a9f5' // Replace this with your AWS Credentials ID stored in Jenkins
+                ]]) {
+                    withAWS(region: 'us-east-1') {
+                        def jenkinsEnvMap = [:]
+
+                        // Loop through each parameter and set the corresponding environment variable dynamically
+                        JENKINS_PARAMS.each { param ->
+                            try {
+                                def value = sh(script: "aws ssm get-parameter --name '${JENKINS_PATH}${param}' --query Parameter.Value --output text", returnStdout: true).trim()
+                                jenkinsEnvMap[param] = value
+                                echo "${param} = ${jenkinsEnvMap[param]}"
+                            } catch (Exception e) {
+                                echo "Failed to retrieve parameter: ${param}. Error: ${e.message}"
+                            }
+                        }
+
+                        // Store the environment variables in the build description
+                        currentBuild.description = jenkinsEnvMap.collect { k, v -> "${k}=${v}" }.join(';')
+                        echo "Build Description: ${currentBuild.description}"
+                    }
+                }
+            }
+        }
+    }
+        // Corrected code for 'Load Lambda Environment Variables' stage
+        stage('Load Lambda Environment Variables') {
+            steps {
+                script {
+                    // Define the list of parameters
+                    def LAMBDA_PARAMS = [
+                        "HOST",
+                        "PORT",
+                        "USER",
+                        "PASSWORD",
+                        "REQUEST_ID_URL",
+                        "COMMON_UTILS_DATABASE",
+                        "REDIRECT_URL",
+                        "CLIENT_ID",
+                        "CREATE_USER_URL",
+                        "AUTH_TOKEN",
+                        "AUTHENTICATE_USER_URL",
+                        "ACCESS_TOKEN_URL",
+                        "CLIENT_SECRET",
+                        "SEND_AUTH_REQUEST_URL",
+                        "PASSWORD_RESET_URL",
+                        "PEOPLE_REVIO_CUSTOMER",
+                        "SERVICEPRODUCT",
+                        "REVIOAPI",
+                        "DEVICEBULKCHANGE_TEST",
+                        "OPTIMIZATIONAPI",
+                        "OPTIMIZATIONAPIQUEUERATEPLANCHANGES",
+                        "OPTIMIZATIONAPI_CREATECOMFIRM_SESSION",
+                        "dbname",
+                        "Opensearch_URL",
+                        "Opensearch_USERNAME",
+                        "Opensearch_PASSWORD",
+                        "ALERT",
+                        "KILL_BILL_MAIL_TRIGGER",
+                        "zitadel_domain",
+                        "ENV",
+                        "S3_BUCKET_NAME",
+                        "APIUSERNAME",
+                        "APIPASSWORD",
+                        "ONEPOINTOSERVER",
+                        "ONEPOINTODATABASE",
+                        "ONEPOINTOUSERNAME",
+                        "ONEPOINTOPASSWORD",
+                        "EXPORT_BASE_PATH",
+                        ]
+                    
+                    // Define the base path for your SSM parameters
+                    def LAMBDA_PATH = '/AMOP/Sandbox/'
+
+                    // Use Jenkins AWS credentials to access AWS Parameter Store
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: '79972fba-7295-4747-8b52-7a611516a9f5' // Replace this with your AWS Credentials ID stored in Jenkins
+                ]]) {
+                    withAWS(region: 'us-east-1') {
+                        def lambdaEnvMap = [:]
+
+                        // Loop through each parameter and set the corresponding environment variable dynamically
+                        LAMBDA_PARAMS.each { param ->
+                            try {
+                                def value = sh(script: "aws ssm get-parameter --name '${LAMBDA_PATH}${param}' --query Parameter.Value --output text", returnStdout: true).trim()
+                                lambdaEnvMap[param] = value
+                                echo "${param} = ${lambdaEnvMap[param]}"
+                            } catch (Exception e) {
+                                echo "Failed to retrieve parameter: ${param}. Error: ${e.message}"
+                            }
+                        }
+
+                        // Store the environment variables in the build description
+                        //currentBuild.description = lambdaEnvMap.collect { k, v -> "${k}=${v}" }.join(';')
+                        //echo "Build Description: ${currentBuild.description}"
+
+                    // Convert the map of environment variables to the required JSON format
+                    def lambdaEnvFormatted = lambdaEnvMap.collect { key, value -> "\"${key}\"=\"${value}\"" }.join(',')
+                    lambdaEnvJson = "{${lambdaEnvFormatted}}"
+
+                    echo "lambdaEnvFormatted: ${lambdaEnvFormatted}"
+                    
+                    // Store the environment variables in the build description for future reference
+                    currentBuild.description += ";lambdaEnv=${lambdaEnvJson}"
+
+                    }
+                }
+            }
+        }
+    }
+
+        stage('Checkout') {
+            steps {
+                script {
+                    def gitCredentialsId = readDescriptionFor('GIT_CREDENTIALS_ID')
+                    def gitRepoUrl = readDescriptionFor('GIT_REPO_URL')
+                    def gitBranch = readDescriptionFor('GIT_BRANCH')
+                    
+                    git credentialsId: gitCredentialsId, url: gitRepoUrl, branch: gitBranch
+                }
+            }
+        }
+
+        
+        stage('Build and Deploy Lambda Layer') {
+            steps {
+                script {
+                    // Zip common_utils folder for Lambda layer
+                    echo "Creating Lambda layer ZIP for CommonUtils"
+                    sh """
+                    mkdir -p package/python/lib/python3.9/site-packages
+                    mkdir -p opt/lib64
+                    pip install -r requirements.txt --target package/python/lib/python3.9/site-packages/
+                                
+                    # Debug: Check if common_utils exists
+                    if [ ! -d "common_utils" ]; then
+                        echo "Error: common_utils directory does not exist."
+                        exit 1
+                    fi
+                    
+                    # Copy psycopg2 if it's available in the current environment
+                    if [ -d "/usr/lib/psycopg2" ]; then
+                        cp -r /usr/lib/psycopg2/* package/python/lib/python3.9/site-packages/
+                    else
+                        echo "Warning: psycopg2 folder not found. Ensure it is installed in the environment or copied manually."
+                    fi
+
+                    if [ -d "/usr/lib/pyodbc" ]; then
+                        cp -r /usr/lib/pyodbc/* package/python/lib/python3.9/site-packages/
+                    else
+                        echo "Warning: pyodbc folder not found. Ensure it is installed in the environment or copied manually."
+                    fi
+
+                    if [ -d "/usr/lib/odbc" ]; then
+                        cp -r /usr/lib/odbc/* opt/lib64/
+                    else
+                        echo "Warning: pyodbc folder not found. Ensure it is installed in the environment or copied manually."
+                    fi
+
+                    cp -r common_utils package/python/lib/python3.9/site-packages/
+                    cd package
+
+                    zip -r ../library.zip python 
+                    cd ..                    
+                    """
+
+                    // Upload Lambda layer ZIP to S3
+                    withAWS(region: readDescriptionFor('AWS_DEFAULT_REGION'), credentials: readDescriptionFor('AWS_CREDENTIALS_ID')) {
+                        echo "Uploading Lambda layer ZIP to S3"
+                        sh """
+                        aws s3 cp library.zip s3://${readDescriptionFor('S3_BUCKET')}/lambda/library.zip
+                        """
+                    }
+                    
+                    // Deploy CommonUtils Lambda layer and capture layerArn
+                    def layerArn = deployLambdaLayer('library.zip', 'CommonUtils Layer')
+                    
+                    
+                    
+                    // Store layerArn as build description for use in subsequent stages
+                    currentBuild.description += ";layerArn=${layerArn}"
+                }
+            }
+        }
+
+        // stage('Build and Deploy Module Management Lambda Layer') {
+        //     steps {
+        //         script {
+        //             // Zip module_management folder for Lambda layer
+        //             echo "Creating Lambda layer ZIP for ModuleManagement"
+        //             sh """
+        //             mkdir -p package2/python/lib/python3.9/site-packages
+        //             cp -r module_management package2/python/lib/python3.9/site-packages/
+        //             cd package2
+        //             zip -r ../module_management_layer.zip python 
+        //             cd ..                    
+        //             """
+
+        //             // Upload Lambda layer ZIP to S3
+        //             withAWS(region: readDescriptionFor('AWS_DEFAULT_REGION'), credentials: readDescriptionFor('AWS_CREDENTIALS_ID')) {
+        //                 echo "Uploading ModuleManagement Lambda layer ZIP to S3"
+        //                 sh """
+        //                 aws s3 cp module_management_layer.zip s3://${readDescriptionFor('S3_BUCKET')}/lambda/module_management_layer.zip
+        //                 """
+        //             }
+                    
+        //             // Deploy ModuleManagement Lambda layer and capture layerArn
+        //             //def moduleManagementLayerArn = deployLambdaLayer('module_management_layer.zip', 'ModuleManagement Layer')
+                    
+        //             // Store moduleManagementLayerArn as build description for use in subsequent stages
+        //             currentBuild.description += ";moduleManagementLayerArn=${moduleManagementLayerArn}"
+        //         }
+        //     }
+        // }
+
+        stage('Build and Deploy Lambda Functions') {
+            steps {
+                script {
+                    // Define an array of Lambda functions with their respective directories
+                    def lambdaFunctions = [
+                        // [name: 'module_management', dir: 'module_management', description: 'common_utils updation'],
+                        [name: 'notification_services', dir: 'notification_services', description: 'usage notification '],
+                        //[name: 'user_authentication', dir: 'user_authentication', description: 'common_utils updation'],
+                        //[name: 'AmopkinesisCDC', dir: 'AmopkinesisCDC', description: 'common_utils updation'],
+                        // [name: 'opensearch', dir: 'opensearch', description: 'schema updates'],
+                        //[name: 'migration_management', dir: 'migration_management', description: 'schema updates'],
+                        //[name: 'migration_job_scheduler', dir: 'migration_job_scheduler', description: 'common_utils updation'],
+                        //[name: 'sim_management', dir: 'sim_management', description: 'common_utils updation'],
+                        //[name: 'tenant_onboarding', dir: 'tenant_onboarding', description: 'common_utils updation'],
+                        //[name: 'dashboard', dir: 'dashboard', description: 'common_utils updation'],
+                        //[name: 'automation_rule', dir: 'automation_rule', description: 'common_utils updation'],
+                        //[name: 'charges_history', dir: 'charges_history', description: 'common_utils updation'],
+                        //[name: 'optimization', dir: 'optimization', description: 'common_utils updation'],
+                        //[name: 'people_module_dev', dir: 'people_module', description: 'common_utils updation'],
+                        //[name: 'device_management_dev', dir: 'device_management', description: 'common_utils updation'],
+                        //[name: 'service_qualification_dev', dir: 'service_qualification', description: 'common_utils updation'],
+                    ]
+
+                    // Loop through each Lambda function to build and deploy
+                    for (function in lambdaFunctions) {
+                        echo "Creating Lambda function ZIP for ${function}"
+                        sh """
+                        cd ${function.dir}
+                        zip -r ../${function.dir}.zip .
+                        cd ..
+                        """
+
+                        // Retrieve layerArn and Lambda environment variables from build description
+                        def layerArn = readDescriptionFor('layerArn')
+                        def lambdaEnv = readDescriptionFor('lambdaEnv')
+                        echo "lambdaEnv: ${lambdaEnv}"
+
+                        // Deploy Lambda function with captured layerArn
+                        deployLambdaFunction(function.name, "${function.dir}.zip", [layerArn], lambdaEnv, function.description)
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+
+// Function to deploy Lambda layer and return layerArn
+def deployLambdaLayer(zipFileName, description) {
+    echo "Deploying Lambda layer"
+    withAWS(region: readDescriptionFor('AWS_DEFAULT_REGION'), credentials: readDescriptionFor('AWS_CREDENTIALS_ID')) {
+        def layerName = description.replaceAll(' ', '_')
+        
+        def newLayerArn = sh(
+            script: """
+            aws lambda publish-layer-version \
+                --layer-name ${layerName} \
+                --description "${description}" \
+                --compatible-runtimes python3.9 \
+                --license-info "MIT" \
+                --content S3Bucket=${readDescriptionFor('S3_BUCKET')},S3Key=lambda/${zipFileName} \
+                --query 'LayerVersionArn' \
+                --output text
+            """,
+            returnStdout: true
+        ).trim()
+        
+        echo "Created new Lambda layer ARN: ${newLayerArn}"
+        return newLayerArn 
+    }
+}
+
+// Function to deploy Lambda function using layerArn
+def deployLambdaFunction(functionName, functionZipFilePath, layerArns, lambdaEnvFormatted, description) {
+    echo "Deploying Lambda function: ${functionName}"
+    withAWS(region: readDescriptionFor('AWS_DEFAULT_REGION'), credentials: readDescriptionFor('AWS_CREDENTIALS_ID')) {
+        
+        // Function to update or create Lambda function
+        def updateOrCreateLambda = {
+            // Check if Lambda function exists
+            def lambdaExists = sh(
+                script: "aws lambda get-function --function-name ${functionName}",
+                returnStatus: true
+            ) == 0
+            if (lambdaExists) {
+                echo "Updating existing Lambda function"
+                s3Upload(
+                    bucket: readDescriptionFor('S3_BUCKET'), 
+                    file: functionZipFilePath,
+                    path: "lambda/${functionName}.zip"
+                )
+                // Update Lambda function code and configuration
+                sh """
+                aws lambda update-function-code --function-name ${functionName} --s3-bucket ${readDescriptionFor('S3_BUCKET')} --s3-key lambda/${functionName}.zip
+                """
+                // Wait for function code update to complete
+                sh """ aws lambda wait function-updated --function-name ${functionName} """
+
+                sh """
+                aws lambda update-function-configuration --function-name ${functionName} \
+                    --handler main.lambda_handler \
+                    --runtime python3.9 \
+                    --role ${readDescriptionFor('LAMBDA_ROLE')} \
+                    --layers ${layerArns.join(' ')} \
+                    --timeout 900 \
+                    --memory-size 768 \
+                    --environment Variables="${lambdaEnvJson}"
+                    """ 
+
+                sh """ aws lambda wait function-updated --function-name ${functionName} """
+
+                // Publish a new version of the Lambda function
+                def newVersionArn = sh(
+                    script: """
+                    aws lambda publish-version --function-name ${functionName} --description "${description}" --query 'FunctionArn' --output text
+                    """,
+                    returnStdout: true
+                ).trim()
+                echo "Published new Lambda version ARN: ${newVersionArn}" 
+                } 
+                
+                else {
+                echo "Creating new Lambda function"                
+                // Upload Lambda function code
+                s3Upload(
+                    bucket: readDescriptionFor('S3_BUCKET'), 
+                    file: functionZipFilePath,
+                    path: "lambda/${functionName}.zip"
+                )
+
+                // Create Lambda function
+                sh """
+                aws lambda create-function \
+                    --function-name ${functionName} \
+                    --runtime python3.9 \
+                    --role ${readDescriptionFor('LAMBDA_ROLE')} \
+                    --handler main.lambda_handler \
+                    --code S3Bucket=${readDescriptionFor('S3_BUCKET')},S3Key=lambda/${functionName}.zip \
+                    --layers ${layerArns.join(' ')} \
+                    --timeout 900 \
+                    --environment Variables="${lambdaEnvJson}"
+                """
+
+            }
+        }
+
+        // Retry logic for Lambda update operation
+        retry(3) {
+            try {
+                updateOrCreateLambda()
+            } catch (Exception e) {
+                echo "Caught exception: $e"
+                error "Failed to deploy Lambda function: $e"
+            }
+        }
+    }
+}
+
+// Function to upload files to S3 bucket
+def s3Upload(params) {
+    sh "aws s3 cp ${params.file} s3://${params.bucket}/${params.path}"
+}
+
+// Helper function to read values from build description
+// def readDescriptionFor(key){
+//     def description = currentBuild.description ?: ""
+//     def matcher = (description =~ /${key}=([^;]*)/)
+//     return matcher ? matcher[0][1] : ""
+// }
+
+// Helper function to read values from build description
+def readDescriptionFor(key) {
+    def envVar = currentBuild.description.tokenize(';').find { it.contains(key) }?.split('=')?.last()
+    return envVar ?: error("Could not find value for key: ${key}")
+}
+

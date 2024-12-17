@@ -1,0 +1,40 @@
+pipeline {
+    agent any
+    
+    environment {
+        AWS_DEFAULT_REGION = 'ap-south-1'  
+        AWS_ACCOUNT_ID = '590818437618' 
+        LAMBDA_ROLE = 'arn:aws:iam::590818437618:role/TejSecondLambdaExecutionRoleNewUnique' 
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                git 'https://github.com/algonox/Amop.git'
+            }
+        }
+        
+        stage('Build and Deploy Lambda') {
+            steps {
+                script {
+                    sh 'cd Amop/common_utils'  
+                    sh 'zip -r common_utils.zip .' 
+                    
+                    // Deploy Lambda function
+                    withAWS(region: AWS_DEFAULT_REGION, credentials: 'aws-credentials') {
+                        def lambdaName = 'AmopTejfirstCICD'
+                        def lambdaZipFile = readFile('common_utils.zip')
+                        
+                        lambda(
+                            functionName: lambdaName,
+                            handler: 'db_utils.lambda_handler',
+                            runtime: 'python3.8',
+                            role: LAMBDA_ROLE,
+                            zipFile: lambdaZipFile
+                        )
+                    }
+                }
+            }
+        }
+    }
+}

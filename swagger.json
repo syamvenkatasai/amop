@@ -1,0 +1,333 @@
+{
+    "openapi": "3.1.0",
+    "info": {
+        "title": "Amop APIs",
+        "description": "API documentation",
+        "version": "1.0.0"
+    },
+    "servers": [
+        {
+            "url": "https://demo-api.amop.services",
+            "description": "SandBox Server"
+        }
+    ],
+    "paths": {
+        "/get_auth_token": {
+            "post": {
+                "summary": "Generate Authentication Token",
+                "description": "This API generates an authentication token for secure access to the AMOP system's services. User can use this token to authenticate and access other endpoints securely. Without this token, requests to the AMOP API will not be processed.",
+                "operationId": "get_auth_token_get_auth_token_post",
+                "requestBody": {
+                    "description": "Input data to get the authentication token.",
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "client_id": {
+                                        "type": "string",
+                                        "description": "Client ID"
+                                    },
+                                    "client_secret": {
+                                        "type": "string",
+                                        "description": "Client secret"
+                                    }
+                                },
+                                "required": [
+                                    "client_id",
+                                    "client_secret"
+                                ]
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "flag": {
+                                            "type": "boolean",
+                                            "description": "Indicates success (true) or failure (false)"
+                                        },
+                                        "access_token": {
+                                            "type": "string",
+                                            "description": "Authentication token"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request. Invalid input or missing parameters."
+                    },
+                    "500": {
+                        "description": "Internal Server Error."
+                    }
+                }
+            }
+        },
+        "/edit_cost_center": {
+            "post": {
+                "summary": "Sim Management Inventory - Edit Cost Center",
+                "description": "This API updates the cost center field in the AMOP system as well as in the linked carrier system. Allows the User to ensure cost center information is synchronized between the AMOP platform and the carrier system, maintaining consistency and accuracy.",
+                "operationId": "edit_cost_center_post",
+                "requestBody": {
+                    "description": "Input data required to process the inventory update.",
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "z_access_token": {
+                                        "type": "string",
+                                        "description": "Authentication token for the request."
+                                    },
+                                    "iccid": {
+                                        "type": "string",
+                                        "description": "iccid for which initiating the request."
+                                    },
+                                    "changed_data": {
+                                        "type": "object",
+                                        "description": "Data to be updated in the inventory. - example: {'cost_center':'....'}"
+                                    }
+                                },
+                                "required": [
+                                    "z_access_token",
+                                    "client_id",
+                                    "iccid",
+                                    "changed_data"
+                                ]
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Successful response indicating the data was updated.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "flag": {
+                                            "type": "boolean",
+                                            "description": "Indicates success (true) or failure (false)."
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "description": "A message describing the result of the operation."
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request. Invalid input or missing parameters."
+                    },
+                    "401": {
+                        "description": "Unauthorized Access ,Invalid Token or missing Token."
+                    },
+                    "500": {
+                        "description": "Internal Server Error."
+                    }
+                }
+            }
+        },
+        "/update_rate_plan": {
+            "post": {
+                "summary": "Sim Management Inventory - Update Rate Plan",
+                "description": "This API updates the rate plans associated with your account, including account-specific and shared rate plans. User can use this API to modify existing rate plans or integrate updated rate plan details into their systems for efficient management of subscriptions and billing.",
+                "operationId": "update_rate_plan_post",
+                "requestBody": {
+                    "description": "Input data required to process the inventory update.",
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "z_access_token": {
+                                        "type": "string",
+                                        "description": "Authentication token for the request."
+                                    },
+                                    "iccid": {
+                                        "type": "string",
+                                        "description": "iccid for which initiating the request."
+                                    },
+                                    "changed_data": {
+                                        "type": "object",
+                                        "description": "Data to be updated in the inventory - example: {'carrier_rate_plan':'....','communication_plan':'....'}"
+                                    }
+                                },
+                                "required": [
+                                    "z_access_token",
+                                    "client_id",
+                                    "iccid",
+                                    "changed_data"
+                                ]
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Successful response indicating the data was updated.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "flag": {
+                                            "type": "boolean",
+                                            "description": "Indicates success (true) or failure (false)."
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "description": "A message describing the result of the operation."
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request. Invalid input or missing parameters."
+                    },
+                    "401": {
+                        "description": "Unauthorized Access ,Invalid Token or missing Token."
+                    },
+                    "500": {
+                        "description": "Internal Server Error."
+                    }
+                }
+            }
+        },
+        "/update_username": {
+            "post": {
+                "summary": "Sim Management Inventory - Update Username",
+                "description": "This API updates the username of any user. User can use this API to update their usernames in a secure, tracked, and efficient manner, ensuring the change is reflected across all connected systems.",
+                "operationId": "update_username_post",
+                "requestBody": {
+                    "description": "Input data required to process the inventory update.",
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "z_access_token": {
+                                        "type": "string",
+                                        "description": "Authentication token for the request."
+                                    },
+                                    "iccid": {
+                                        "type": "string",
+                                        "description": "iccid for which initiating the request."
+                                    },
+                                    "changed_data": {
+                                        "type": "object",
+                                        "description": "Data to be updated in the inventory - example: {'username':'....'}"
+                                    }
+                                },
+                                "required": [
+                                    "z_access_token",
+                                    "client_id",
+                                    "iccid",
+                                    "changed_data"
+                                ]
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Successful response indicating the data was updated.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "flag": {
+                                            "type": "boolean",
+                                            "description": "Indicates success (true) or failure (false)."
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "description": "A message describing the result of the operation."
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request. Invalid input or missing parameters."
+                    },
+                    "401": {
+                        "description": "Unauthorized Access ,Invalid Token or missing Token."
+                    },
+                    "500": {
+                        "description": "Internal Server Error."
+                    }
+                }
+            }
+        }
+    },
+    "components": {
+        "schemas": {
+            "HTTPValidationError": {
+                "properties": {
+                    "detail": {
+                        "items": {
+                            "$ref": "#/components/schemas/ValidationError"
+                        },
+                        "type": "array",
+                        "title": "Detail"
+                    }
+                },
+                "type": "object",
+                "title": "HTTPValidationError"
+            },
+            "ValidationError": {
+                "properties": {
+                    "loc": {
+                        "items": {
+                            "anyOf": [
+                                {
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "integer"
+                                }
+                            ]
+                        },
+                        "type": "array",
+                        "title": "Location"
+                    },
+                    "msg": {
+                        "type": "string",
+                        "title": "Message"
+                    },
+                    "type": {
+                        "type": "string",
+                        "title": "Error Type"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "loc",
+                    "msg",
+                    "type"
+                ],
+                "title": "ValidationError"
+            }
+        }
+    }
+}

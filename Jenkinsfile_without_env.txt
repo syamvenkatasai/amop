@@ -1,0 +1,264 @@
+pipeline {
+    agent any
+
+    environment {
+        JENKINS_ENV_FILE = 'Jenkins.env'
+        LAMBDA_ENV_FILE = 'lambda.env'
+    }
+
+    stages {
+        stage('Load Jenkins Environment Variables') {
+            steps {
+                script {
+                    // Read Jenkins environment file and export the variables
+                    def jenkinsEnvVars = readFile(JENKINS_ENV_FILE).split('\n')
+                    def jenkinsEnvMap = [:]
+                    
+                    jenkinsEnvVars.each { line ->
+                        if (line.trim()) {
+                            def (key, value) = line.tokenize('=').with { it[0].trim(), it.size() > 1 ? it[1..-1].join('=').trim() : '' }
+                            jenkinsEnvMap[key] = value
+                        }
+                    }
+                    
+                    // Store Jenkins environment variables in build description for later use
+                    currentBuild.description = jenkinsEnvMap.collect { k, v -> "${k}=${v}" }.join(';')
+                }
+            }
+        }
+
+        stage('Load Lambda Environment Variables') {
+            steps {
+                script {
+                    // Read Lambda environment file and export the variables
+                    def lambdaEnvVars = readFile(LAMBDA_ENV_FILE).split('\n')
+                    def lambdaEnvMap = [:]
+                    
+                    lambdaEnvVars.each { line ->
+                        if (line.trim()) {
+                            def (key, value) = line.tokenize('=').with { it[0].trim(), it.size() > 1 ? it[1..-1].join('=').trim() : '' }
+                            lambdaEnvMap[key] = value
+                        }
+                    }
+                    
+                    // Convert the lambdaEnvMap to a format suitable for Lambda environment
+                    def lambdaEnvFormatted = lambdaEnvMap.collect { k, v -> "${k}=\"${v}\"" }.join(',')
+                    
+                    // Store Lambda environment variables in build description for later use
+                    currentBuild.description += ";lambdaEnv=${lambdaEnvFormatted}"
+                }
+            }
+        }
+
+        stage('Checkout') {
+            steps {
+                script {
+                    def gitCredentialsId = readDescriptionFor('GIT_CREDENTIALS_ID')
+                    def gitRepoUrl = readDescriptionFor('GIT_REPO_URL')
+                    def gitBranch = readDescriptionFor('GIT_BRANCH')
+                    
+                    git credentialsId: gitCredentialsId, url: gitRepoUrl, branch: gitBranch
+                }
+            }
+        }
+
+        stage('Build and Deploy Lambda Layer') {
+            steps {
+                script {
+                    echo "Creating Lambda layer ZIP for CommonUtils"
+                    sh """
+                    mkdir -p package/python/lib/python3.9/site-packages
+                    pip install -r requirements.txt --target package/python/lib/python3.9/site-packages/
+                    
+                    if [ ! -d "common_utils" ]; then
+                        echo "Error: common_utils directory does not exist."
+                        exit 1
+                    fi
+                    
+                    if [ -d "/usr/lib/psycopg2" ]; then
+                        cp -r /usr/lib/psycopg2/* package/python/lib/python3.9/site-packages/
+                    else
+                        echo "Warning: psycopg2 folder not found."
+                    fi
+
+                    cp -r common_utils package/python/lib/python3.9/site-packages/
+                    cd package
+
+                    zip -r ../library.zip python 
+                    cd ..                    
+                    """
+
+                    withAWS(region: readDescriptionFor('AWS_DEFAULT_REGION'), credentials: readDescriptionFor('AWS_CREDENTIALS_ID')) {
+                        echo "Uploading Lambda layer ZIP to S3"
+                        sh """
+                        aws s3 cp library.zip s3://${readDescriptionFor('S3_BUCKET')}/lambda/library.zip
+                        """
+                    }
+                    
+                    def layerArn = deployLambdaLayer('library.zip', 'CommonUtils Layer')
+                    
+                    currentBuild.description += ";layerArn=${layerArn}"
+                }
+            }
+        }
+
+        stage('Build and Deploy Module Management Lambda Function') {
+            steps {
+                script {
+                    echo "Creating Lambda function ZIP for module_management"
+                    sh """
+                    cd module_management
+                    zip -r ../module_management.zip .
+                    cd ..
+                    """
+                    
+                    def layerArn = readDescriptionFor('layerArn')
+                    def lambdaEnv = readDescriptionFor('lambdaEnv')
+                    
+                    deployLambdaFunction('module_management', 'module_management.zip', [layerArn], lambdaEnv)
+                }
+            }
+        }
+
+        stage('Build and Deploy User Authentication Lambda Function') {
+            steps {
+                script {
+                    echo "Creating Lambda function ZIP for user_authentication"
+                    sh """
+                    cd user_authentication
+                    zip -r ../user_authentication.zip .
+                    cd ..
+                    """
+                    
+                    def layerArn = readDescriptionFor('layerArn')
+                    def lambdaEnv = readDescriptionFor('lambdaEnv')
+                    
+                    deployLambdaFunction('user_authentication', 'user_authentication.zip', [layerArn], lambdaEnv)
+                }
+            }
+        }
+
+        stage('Build and Deploy OpenSearch Lambda Function') {
+            steps {
+                script {
+                    echo "Creating Lambda function ZIP for OpenSearch"
+                    sh """
+                    cd opensearch
+                    zip -r ../opensearch.zip .
+                    cd ..
+                    """
+                    
+                    def layerArn = readDescriptionFor('layerArn')
+                    def lambdaEnv = readDescriptionFor('lambdaEnv')
+                    
+                    deployLambdaFunction('opensearch', 'opensearch.zip', [layerArn], lambdaEnv)
+                }
+            }
+        }
+
+        stage('Build and Deploy SIM Management Lambda Function') {
+            steps {
+                script {
+                    echo "Creating Lambda function ZIP for sim_management"
+                    sh """
+                    cd sim_management
+                    zip -r ../sim_management.zip .
+                    cd ..
+                    """
+                    
+                    def layerArn = readDescriptionFor('layerArn')
+                    def lambdaEnv = readDescriptionFor('lambdaEnv')
+                    
+                    deployLambdaFunction('sim_management', 'sim_management.zip', [layerArn], lambdaEnv)
+                }
+            }
+        }
+    }
+}
+
+// Function to deploy Lambda layer and return layerArn
+def deployLambdaLayer(zipFileName, description) {
+    echo "Deploying Lambda layer"
+    withAWS(region: readDescriptionFor('AWS_DEFAULT_REGION'), credentials: readDescriptionFor('AWS_CREDENTIALS_ID')) {
+        def layerName = description.replaceAll(' ', '_')
+        
+        def newLayerArn = sh(
+            script: """
+            aws lambda publish-layer-version \
+                --layer-name ${layerName} \
+                --description "${description}" \
+                --compatible-runtimes python3.9 \
+                --license-info "MIT" \
+                --content S3Bucket=${readDescriptionFor('S3_BUCKET')},S3Key=lambda/${zipFileName} \
+                --query 'LayerVersionArn' \
+                --output text
+            """,
+            returnStdout: true
+        ).trim()
+        
+        echo "Created new Lambda layer ARN: ${newLayerArn}"
+        return newLayerArn 
+    }
+}
+
+// Function to deploy Lambda function using layerArn
+def deployLambdaFunction(functionName, functionZipFilePath, layerArns, lambdaEnv) {
+    echo "Deploying Lambda function: ${functionName}"
+    withAWS(region: readDescriptionFor('AWS_DEFAULT_REGION'), credentials: readDescriptionFor('AWS_CREDENTIALS_ID')) {
+        
+        def updateOrCreateLambda = {
+            def lambdaExists = sh(
+                script: "aws lambda get-function --function-name ${functionName}",
+                returnStatus: true
+            ) == 0
+
+            if (lambdaExists) {
+                echo "Updating existing Lambda function"
+                sh """
+                aws lambda update-function-code --function-name ${functionName} --s3-bucket ${readDescriptionFor('S3_BUCKET')} --s3-key lambda/${functionName}.zip
+                aws lambda wait function-updated --function-name ${functionName}
+                aws lambda update-function-configuration --function-name ${functionName} --handler main.lambda_handler --runtime python3.9 --role ${readDescriptionFor('LAMBDA_ROLE')} --layers ${layerArns.join(' ')} --timeout 900 --memory-size 256 --environment Variables={${lambdaEnv}}
+                """
+            } else {
+                echo "Creating new Lambda function"
+                s3Upload(
+                    bucket: readDescriptionFor('S3_BUCKET'), 
+                    file: functionZipFilePath,
+                    path: "lambda/${functionName}.zip"
+                )
+
+                sh """
+                aws lambda create-function \
+                    --function-name ${functionName} \
+                    --runtime python3.9 \
+                    --role ${readDescriptionFor('LAMBDA_ROLE')} \
+                    --handler main.lambda_handler \
+                    --code S3Bucket=${readDescriptionFor('S3_BUCKET')},S3Key=lambda/${functionName}.zip \
+                    --layers ${layerArns.join(' ')} \
+                    --timeout 900 \
+                    --environment Variables={${lambdaEnv}}
+                """
+            }
+        }
+
+        retry(3) {
+            try {
+                updateOrCreateLambda()
+            } catch (Exception e) {
+                echo "Caught exception: $e"
+                error "Failed to deploy Lambda function: $e"
+            }
+        }
+    }
+}
+
+// Function to upload files to S3 bucket
+def s3Upload(params) {
+    sh "aws s3 cp ${params.file} s3://${params.bucket}/${params.path}"
+}
+
+// Helper function to read values from build description
+def readDescriptionFor(key) {
+    def envVar = currentBuild.description.tokenize(';').find { it.contains(key) }?.split('=')?.last()
+    return envVar ?: error("Could not find value for key: ${key}")
+}
