@@ -1,0 +1,24 @@
+# LOCAL_DB_HOST=updatedpostgresdb.clemh90k3zaz.ap-south-1.rds.amazonaws.com
+# LOCAL_DB_HOST=amopuatpostgresdb.c3qae66ke1lg.us-east-1.rds.amazonaws.com #--uat
+# LOCAL_DB_HOST=amoppostgresdbsandbox.c3qae66ke1lg.us-east-1.rds.amazonaws.com --sandbox old
+LOCAL_DB_HOST=amoppostgres.c3qae66ke1lg.us-east-1.rds.amazonaws.com
+LOCAL_DB_PORT=5432
+MIGRATION_TABLE=migrations
+# MIGRATION_TABLE=migrations
+LOCAL_DB_USER=root
+LOCAL_DB_PASSWORD=AmopTeam123
+# LOCAL_DB_PASSWORD=Amopteam123
+# LOCAL_DB_PASSWORD=AlgoTeam123
+LOCAL_DB_TYPE=postgresql
+DF_SIZE=50000
+
+FROM_DB_HOST=awx-central.cnikycxqaajm.us-east-1.rds.amazonaws.com
+# FROM_DB_HOST=altaworx-test.cd98i7zb3ml3.us-east-1.rds.amazonaws.com
+FROM_DB_PORT=1433
+
+FROM_DB_USER=ALGONOX-Vyshnavi
+FROM_DB_PASSWORD=cs!Vtqe49gM32FDi
+FROM_DB_TYPE=mssql
+FROM_DB_DRIVER={ODBC Driver 17 for SQL Server}
+
+# job='reverse_sync_ex'

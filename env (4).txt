@@ -1,0 +1,10 @@
+LOCAL_DB_HOST=amopuatpostgresdb.c3qae66ke1lg.us-east-1.rds.amazonaws.com
+# LOCAL_DB_HOST=amoppostgresdbsandbox.c3qae66ke1lg.us-east-1.rds.amazonaws.com
+#LOCAL_DB_HOST=amoppostoct19.c3qae66ke1lg.us-east-1.rds.amazonaws.com#amoppostgres.c3qae66ke1lg.us-east-1.rds.amazonaws.com
+LOCAL_DB_PORT=5432
+# MIGRATION_TABLE=migrations_2
+LOCAL_DB_USER=root
+# LOCAL_DB_PASSWORD=AmopTeam123
+LOCAL_DB_PASSWORD=AlgoTeam123
+# LOCAL_DB_PASSWORD=Amopteam123
+LOCAL_DB_TYPE=postgresql
